@@ -32,7 +32,13 @@ def get_spotify_client():
             with open(".cache", "w") as f:
                 f.write(cache_content)
     
-    return spotipy.Spotify(auth_manager=SpotifyOAuth(scope=SCOPE))
+    try:
+        return spotipy.Spotify(auth_manager=SpotifyOAuth(scope=SCOPE))
+    except Exception as e:
+        print(f"\nCRITICAL ERROR: Authentication failed.\nDetails: {e}")
+        print("\nACTION REQUIRED: likely missing 'SPOTIFY_CACHE' secret in GitHub.")
+        print("Please verify your GitHub Repository Secrets and update 'SPOTIFY_CACHE'.\n")
+        raise e
 
 def add_artist(name):
     state = load_state()
