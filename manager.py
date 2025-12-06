@@ -32,8 +32,18 @@ def get_spotify_client():
             with open(".cache", "w") as f:
                 f.write(cache_content)
     
+    # Prevent interactive prompt hanging in GitHub Actions
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        import builtins
+        def fail_input(prompt=None):
+            raise Exception(f"Interactive input prevented in GitHub Actions (Prompt: {prompt})")
+        builtins.input = fail_input
+
     try:
-        return spotipy.Spotify(auth_manager=SpotifyOAuth(scope=SCOPE))
+        # open_browser=False prevents legitimate local browser opening, but we only strictly need it 
+        # to prevent popping windows on servers. Combined with the input patch above, this is safe.
+        return spotipy.Spotify(auth_manager=SpotifyOAuth(scope=SCOPE, open_browser=False))
+
     except Exception as e:
         print(f"\nCRITICAL ERROR: Authentication failed.\nDetails: {e}")
         print("\nACTION REQUIRED: likely missing 'SPOTIFY_CACHE' secret in GitHub.")
