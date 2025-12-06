@@ -27,6 +27,39 @@ def get_spotify_client():
     # Check if we are in a headless environment (GitHub Actions) and need to restore cache
     if not os.path.exists(".cache"):
         cache_content = os.environ.get("SPOTIFY_CACHE")
+        if cache_content:
+            print("Restoring Spotify cache from environment variable...")
+            with open(".cache", "w") as f:
+                f.write(cache_content)
+    
+    # Prevent interactive prompt hanging in GitHub Actions
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        import builtins
+        def fail_input(prompt=None):
+            raise Exception(f"Interactive input prevented in GitHub Actions (Prompt: {prompt})")
+        builtins.input = fail_input
+
+    # DEBUG: Check if credentials are loaded correctly
+    cid = os.environ.get("SPOTIPY_CLIENT_ID", "")
+    csec = os.environ.get("SPOTIPY_CLIENT_SECRET", "")
+    curi = os.environ.get("SPOTIPY_REDIRECT_URI", "")
+    
+    # Only print debug info if in GitHub Actions or explicitly debugging
+    if os.environ.get("GITHUB_ACTIONS") == "true" or True:
+        print(f"DEBUG: Client ID length: {len(cid)} (First 2: {cid[:2]}... Last 2: ...{cid[-2:]})")
+        print(f"DEBUG: Client Secret length: {len(csec)} (First 2: {csec[:2]}... Last 2: ...{csec[-2:]})")
+        print(f"DEBUG: Redirect URI: {curi}")
+        
+        if len(cid) != 32:
+            print("WARNING: Client ID seems to have wrong length (Should be 32). Check for spaces?")
+        if len(csec) != 32:
+            print("WARNING: Client Secret seems to have wrong length (Should be 32). Check for spaces?")
+
+    try:
+        # open_browser=False prevents legitimate local browser opening, but we only strictly need it 
+        # to prevent popping windows on servers. Combined with the input patch above, this is safe.
+        return spotipy.Spotify(auth_manager=SpotifyOAuth(scope=SCOPE, open_browser=False))
+
     except Exception as e:
         print(f"\nCRITICAL ERROR: Authentication failed.\nDetails: {e}")
         print("\nACTION REQUIRED: likely missing 'SPOTIFY_CACHE' secret in GitHub.")
@@ -82,12 +115,10 @@ def list_artists():
         for artist in state['artists']:
             print(f"- {artist['name']}")
 
-    return new_tracks
-
 def is_duplicate_track(sp, artist_name, track_name):
     """
-    Checks if a track with the same name exists and is OLDER than 30 days.
-    Returns: True if duplicate found (and older than 30 days), False if safe to add.
+    Checks if a track with the same name exists and is OLDER than 7 days.
+    Returns: True if duplicate found (and older than 7 days), False if safe to add.
     """
     # 1. Safety Filter: If it's a Remix, Edit, VIP, it's likely a distinct version.
     safe_terms = ['remix', 'edit', 'mix', 'vip', 'club', 'radio', 'instrumental', 'extended', 'version']
