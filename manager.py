@@ -99,6 +99,57 @@ def list_artists():
         for artist in state['artists']:
             print(f"- {artist['name']}")
 
+    return new_tracks
+
+def is_duplicate_track(sp, artist_name, track_name):
+    """
+    Checks if a track with the same name exists and is OLDER than 30 days.
+    Returns: True if duplicate found (and older than 30 days), False if safe to add.
+    """
+    # 1. Safety Filter: If it's a Remix, Edit, VIP, it's likely a distinct version.
+    safe_terms = ['remix', 'edit', 'mix', 'vip', 'club', 'radio', 'instrumental', 'extended', 'version']
+    if any(term in track_name.lower() for term in safe_terms):
+        return False
+        
+    try:
+        # 2. Search for the exact track name
+        query = f"track:{track_name} artist:{artist_name}"
+        # Fetch a few results to be sure
+        results = sp.search(q=query, type='track', limit=5)
+        items = results['tracks']['items']
+        
+        now = datetime.datetime.now()
+        seven_days_ago = now - datetime.timedelta(days=7)
+        
+        for item in items:
+            # Check name match (search is fuzzy, be strict here)
+            if item['name'].lower() != track_name.lower():
+                continue
+                
+            try:
+                # Handle varying date precision
+                rd = item['album']['release_date']
+                p = item['album']['release_date_precision']
+                
+                if p == 'year':
+                    dt = datetime.datetime.strptime(rd, '%Y')
+                elif p == 'month':
+                    dt = datetime.datetime.strptime(rd, '%Y-%m')
+                else:
+                    dt = datetime.datetime.strptime(rd, '%Y-%m-%d')
+                    
+                # Strict Rule: If we find ANY version released > 7 days ago, it's OLD.
+                if dt < seven_days_ago:
+                    print(f"    - Skipping old track '{track_name}' (First released: {rd})")
+                    return True
+            except:
+                continue
+                
+    except Exception as e:
+        print(f"    - Generic error checking duplicate for {track_name}: {e}")
+        
+    return False
+
 def get_new_releases(sp, artist_id, artist_name):
     """Fetches tracks from albums/singles released in the last 7 days."""
     new_tracks = []
@@ -121,6 +172,10 @@ def get_new_releases(sp, artist_id, artist_name):
                 # It's a new release! Fetch tracks.
                 tracks = sp.album_tracks(album['id'])['items']
                 for track in tracks:
+                    # Check for "re-released" duplicates
+                    if is_duplicate_track(sp, artist_name, track['name']):
+                        continue
+
                     # Enrich track data
                     track['album'] = album # Inject album info manually since album_tracks doesn't have it
                     track['artist_name'] = artist_name
